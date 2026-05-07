@@ -4,6 +4,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from importlib.metadata import version
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
@@ -13,7 +14,7 @@ from .models import BundleAnalysisResult
 app = FastAPI(
     title="bundle-analyser",
     description="Analyse collections of files in folders or zip archives",
-    version="0.2.0",
+    version=version("bundle-analyser"),
 )
 
 
