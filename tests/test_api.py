@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
+from importlib.metadata import version
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from bundle_analyser.api import app
-from bundle_analyser.models import BundleAnalysisResult, FileResult
 
 client = TestClient(app)
 
@@ -22,21 +22,6 @@ def make_mock_proc(returncode=0, stdout=FAKE_RESULT, stderr=""):
     return m
 
 
-def make_bundle_result(source: str = "/tmp/test", source_type: str = "folder") -> BundleAnalysisResult:
-    fr = FileResult(file="report.txt", analyser="document-analyser", result={"routed_to": "document-analyser"}, error=None)
-    return BundleAnalysisResult(
-        source=source,
-        source_type=source_type,
-        total_files=1,
-        analysed_files=1,
-        unrecognised_files=[],
-        errors=[],
-        file_type_distribution={"txt": 1},
-        results=[fr],
-        error=None,
-    )
-
-
 # ---------------------------------------------------------------------------
 # GET /health
 # ---------------------------------------------------------------------------
@@ -44,7 +29,9 @@ def make_bundle_result(source: str = "/tmp/test", source_type: str = "folder") -
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["version"] == version("bundle-analyser")
 
 
 # ---------------------------------------------------------------------------
@@ -57,12 +44,21 @@ def test_analyse_nonexistent_path():
 
 
 def test_analyse_valid_folder(sample_folder):
-    with patch("bundle_analyser.core.subprocess.run", return_value=make_mock_proc()):
+    with patch("bundle_analyser.core.subprocess.run", return_value=make_mock_proc()) as mock_run:
         response = client.post("/analyse", json={"path": str(sample_folder)})
     assert response.status_code == 200
     data = response.json()
     assert data["source_type"] == "folder"
     assert data["total_files"] >= 4
+
+    # Verify the right command + flags are dispatched
+    called_args = mock_run.call_args_list
+    assert len(called_args) >= 1
+    for call in called_args:
+        cmd = call.args[0]
+        assert cmd[0] == "auto-analyser"
+        assert cmd[1] == "analyse"
+        assert cmd[-1] == "--json"
 
 
 def test_analyse_url_rejected():
@@ -85,7 +81,7 @@ def test_upload_non_zip():
 
 
 def test_upload_valid_zip(sample_zip):
-    with patch("bundle_analyser.core.subprocess.run", return_value=make_mock_proc()):
+    with patch("bundle_analyser.core.subprocess.run", return_value=make_mock_proc()) as mock_run:
         with open(sample_zip, "rb") as f:
             response = client.post(
                 "/analyse/upload",
@@ -95,3 +91,12 @@ def test_upload_valid_zip(sample_zip):
     data = response.json()
     assert data["source_type"] == "zip"
     assert data["total_files"] >= 4
+
+    # Verify the right command + flags are dispatched
+    called_args = mock_run.call_args_list
+    assert len(called_args) >= 1
+    for call in called_args:
+        cmd = call.args[0]
+        assert cmd[0] == "auto-analyser"
+        assert cmd[1] == "analyse"
+        assert cmd[-1] == "--json"

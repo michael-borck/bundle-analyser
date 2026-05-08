@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bundle-analyser"
-version = "0.2.1"
+version = "0.2.2"
 description = "Bundle analyser — analyses collections of files in folders or zip archives, dispatching to the analyser family"
 authors = [{name = "Michael Borck", email = "michael.borck@curtin.edu.au"}]
 readme = "README.md"
@@ -43,3 +43,7 @@ packages = ["src/bundle_analyser"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: tests that load real models or make network calls — opt-in with `pytest -m slow`",
+]

@@ -20,7 +20,7 @@ app = FastAPI(
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "version": version("bundle-analyser")}
 
 
 class AnalyseRequest(BaseModel):
