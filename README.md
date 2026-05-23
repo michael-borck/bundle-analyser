@@ -1,6 +1,6 @@
 # bundle-analyser
 
-Part of the **analyser family** — analyses collections of files in folders or zip archives.
+Part of the [analyser family](https://github.com/michael-borck/lens-analysers) — analyses collections of files in folders or zip archives.
 
 Accepts a folder path or a zip file, walks all files, dispatches each to the appropriate
 analyser family member (via `auto-analyser`), and returns per-file signals plus
