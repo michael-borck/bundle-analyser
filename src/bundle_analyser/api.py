@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from .core import analyse_bundle
+from .manifest import MANIFEST
 from .models import BundleAnalysisResult
 
 app = FastAPI(
@@ -21,6 +22,11 @@ app = FastAPI(
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "version": version("bundle-analyser")}
+
+
+@app.get("/manifest")
+def manifest() -> dict:
+    return MANIFEST
 
 
 class AnalyseRequest(BaseModel):

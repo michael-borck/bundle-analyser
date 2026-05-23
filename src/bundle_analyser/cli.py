@@ -28,7 +28,14 @@ def main() -> None:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8008)
 
+    sub.add_parser("manifest", help="Print the capability manifest as JSON")
+
     args = parser.parse_args()
+
+    if args.command == "manifest":
+        from .manifest import MANIFEST
+        print(json.dumps(MANIFEST, indent=2))
+        return
 
     if args.command == "serve":
         uvicorn.run(
