@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bundle-analyser"
-version = "0.3.0"
+version = "0.4.0"
 description = "Bundle analyser — analyses collections of files in folders or zip archives, dispatching to the analyser family"
 authors = [{name = "Michael Borck", email = "michael.borck@curtin.edu.au"}]
 readme = "README.md"
@@ -19,6 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
+    "lens-contract>=0.2.0",
     "fastapi>=0.109.0",
     "uvicorn>=0.27.0",
     "python-multipart>=0.0.6",
@@ -33,6 +34,11 @@ dev = [
     "pytest-cov>=4.1.0",
     "httpx>=0.27.0",
 ]
+
+# Local dev: resolve lens-contract from the sibling checkout. uv strips this from
+# the published wheel, which keeps the plain `lens-contract>=0.2.0` PyPI pin.
+[tool.uv.sources]
+lens-contract = { path = "../lens-contract", editable = true }
 
 [project.scripts]
 bundle-analyser = "bundle_analyser.cli:main"

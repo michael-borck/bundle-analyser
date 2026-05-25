@@ -3,8 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import uvicorn
-from pathlib import Path
+
 from rich.console import Console
 from rich.table import Table
 
@@ -14,36 +13,27 @@ console = Console()
 
 
 def main() -> None:
+    from lens_contract import run_contract_subcommands
+
+    from .manifest import MANIFEST
+
+    # `serve` and `manifest` are the family's shared subcommands (lens-contract).
+    if run_contract_subcommands(
+        MANIFEST,
+        app_path="bundle_analyser.api:app",
+        default_port=8008,
+        env_prefix="BUNDLE_ANALYSER",
+    ):
+        return
+
     parser = argparse.ArgumentParser(
         prog="bundle-analyser",
         description="Analyse a collection of files in a folder or zip archive",
+        epilog="subcommands: `serve` (run the HTTP API), `manifest` (print the capability manifest)",
     )
-    sub = parser.add_subparsers(dest="command")
-
-    # analyse (default — bare `bundle-analyser <path>`)
     parser.add_argument("path", nargs="?", help="Folder or zip file to analyse")
     parser.add_argument("--json", action="store_true")
-
-    serve = sub.add_parser("serve", help="Start the HTTP API server")
-    serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8008)
-
-    sub.add_parser("manifest", help="Print the capability manifest as JSON")
-
     args = parser.parse_args()
-
-    if args.command == "manifest":
-        from .manifest import MANIFEST
-        print(json.dumps(MANIFEST, indent=2))
-        return
-
-    if args.command == "serve":
-        uvicorn.run(
-            "bundle_analyser.api:app",
-            host=args.host,
-            port=args.port,
-        )
-        return
 
     if not args.path:
         parser.print_help()

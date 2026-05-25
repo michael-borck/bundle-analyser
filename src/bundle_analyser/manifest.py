@@ -5,22 +5,13 @@ explicitly rather than routed to by file extension.
 """
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version
+from lens_contract import make_manifest
 
-
-def _version() -> str:
-    try:
-        return version("bundle-analyser")
-    except PackageNotFoundError:
-        return "0.0.0"
-
-
-MANIFEST: dict = {
-    "name": "bundle-analyser",
-    "version": _version(),
-    "role": "orchestrator",
-    "accepts": ["bundle", "folder", "zip"],
-    "extensions": [],
-    "auto_routable": False,
-    "produces": "BundleAnalysisResult",
-}
+MANIFEST = make_manifest(
+    name="bundle-analyser",
+    role="orchestrator",
+    accepts=["bundle", "folder", "zip"],
+    extensions=[],
+    auto_routable=False,
+    produces="BundleAnalysisResult",
+)

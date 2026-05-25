@@ -4,8 +4,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from importlib.metadata import version
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from lens_contract import add_contract_routes, add_cors
 from pydantic import BaseModel
 
 from .core import analyse_bundle
@@ -15,18 +15,13 @@ from .models import BundleAnalysisResult
 app = FastAPI(
     title="bundle-analyser",
     description="Analyse collections of files in folders or zip archives",
-    version=version("bundle-analyser"),
+    version=MANIFEST["version"],
 )
 
-
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok", "version": version("bundle-analyser")}
-
-
-@app.get("/manifest")
-def manifest() -> dict:
-    return MANIFEST
+# GET /health and GET /manifest (the family contract, via lens-contract).
+add_contract_routes(app, MANIFEST)
+# CORS — env-driven: BUNDLE_ANALYSER_MODE=desktop (Electron) or BUNDLE_ANALYSER_ALLOWED_ORIGINS.
+add_cors(app, env_prefix="BUNDLE_ANALYSER")
 
 
 class AnalyseRequest(BaseModel):
