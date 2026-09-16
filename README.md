@@ -23,3 +23,26 @@ Coming soon. Name reserved on PyPI.
 ## Port
 
 `8008` (reserved)
+
+## Local (CLI) routing
+
+`bundle-analyser` dispatches every file through `auto-analyser`, whose built-in
+defaults expect HTTP services on `localhost:800x`. For a fully local setup —
+specialists installed in the same venv, invoked as CLIs — point `auto-analyser`
+at them via `./auto-analyser.yaml` (beside where you run from) or
+`~/.config/auto-analyser/config.yaml`:
+
+```yaml
+analysers:
+  document-analyser: { type: cli, command: document-analyser }
+  code-analyser: { type: cli, command: code-analyser }
+  speech-analyser: { type: cli, command: speech-analyser }
+  video-analyser: { type: cli, command: video-analyser }
+  image-analyser: { type: cli, command: image-analyser }
+  records-analyser: { type: cli, command: records-analyser }
+  diagram-analyser: { type: cli, command: diagram-analyser }
+```
+
+Each listed member must expose the family contract: a `manifest` subcommand and
+`<command> <file> --json` → JSON on stdout. Unlisted members keep the HTTP
+defaults and error per-file when the service isn't running.
