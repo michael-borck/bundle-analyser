@@ -46,3 +46,13 @@ analysers:
 Each listed member must expose the family contract: a `manifest` subcommand and
 `<command> <file> --json` → JSON on stdout. Unlisted members keep the HTTP
 defaults and error per-file when the service isn't running.
+
+## Cascade results (0.6+)
+
+When auto-analyser's cascade passes fire (e.g. document → provenance / conversation /
+reflection), each cascade block is **promoted to a first-class result row** with the
+same shape as a direct route — so consumers resolve signal paths by member name
+unchanged. Promoted rows carry `via: "cascade:<triggered_by>"`, marking the signal
+set as **auto-detected**: heuristics can misfire, and the human reader decides how
+much weight to give them. Cascade rows don't inflate `analysed_files` or the
+extension distribution.

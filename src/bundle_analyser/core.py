@@ -25,8 +25,8 @@ def _walk_folder(folder: Path) -> list[Path]:
     return files
 
 
-def _analyse_file(file_path: Path, rel_path: str) -> FileResult:
-    """Call auto-analyser on a single file and return a FileResult."""
+def _analyse_file(file_path: Path, rel_path: str) -> list[FileResult]:
+    """Call auto-analyser on a single file; returns primary + cascade FileResults."""
     try:
         proc = subprocess.run(
             ["auto-analyser", "analyse", str(file_path), "--json"],
@@ -35,53 +35,84 @@ def _analyse_file(file_path: Path, rel_path: str) -> FileResult:
             timeout=120,
         )
     except FileNotFoundError:
-        return FileResult(
-            file=rel_path,
-            analyser=None,
-            result=None,
-            error="auto-analyser is not installed or not on PATH",
-        )
+        return [
+            FileResult(
+                file=rel_path,
+                analyser=None,
+                result=None,
+                error="auto-analyser is not installed or not on PATH",
+            )
+        ]
     except subprocess.TimeoutExpired:
-        return FileResult(
-            file=rel_path,
-            analyser=None,
-            result=None,
-            error=f"Timed out after 120 seconds analysing {rel_path}",
-        )
+        return [
+            FileResult(
+                file=rel_path,
+                analyser=None,
+                result=None,
+                error=f"Timed out after 120 seconds analysing {rel_path}",
+            )
+        ]
     except Exception as exc:
-        return FileResult(
-            file=rel_path,
-            analyser=None,
-            result=None,
-            error=f"Unexpected error: {exc}",
-        )
+        return [
+            FileResult(
+                file=rel_path,
+                analyser=None,
+                result=None,
+                error=f"Unexpected error: {exc}",
+            )
+        ]
 
     if proc.returncode != 0:
         stderr = proc.stderr.strip() if proc.stderr else "unknown error"
-        return FileResult(
-            file=rel_path,
-            analyser=None,
-            result=None,
-            error=f"auto-analyser exited with code {proc.returncode}: {stderr}",
-        )
+        return [
+            FileResult(
+                file=rel_path,
+                analyser=None,
+                result=None,
+                error=f"auto-analyser exited with code {proc.returncode}: {stderr}",
+            )
+        ]
 
     try:
         data = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
-        return FileResult(
-            file=rel_path,
-            analyser=None,
-            result=None,
-            error=f"Could not parse auto-analyser output: {exc}",
-        )
+        return [
+            FileResult(
+                file=rel_path,
+                analyser=None,
+                result=None,
+                error=f"Could not parse auto-analyser output: {exc}",
+            )
+        ]
 
     analyser = data.get("routed_to")
-    return FileResult(
-        file=rel_path,
-        analyser=analyser,
-        result=data,
-        error=None,
-    )
+    results = [
+        FileResult(
+            file=rel_path,
+            analyser=analyser,
+            result=data,
+            error=None,
+        )
+    ]
+    # Cascade passes (implicit second reads, e.g. document → provenance /
+    # conversation / reflection) are promoted into first-class FileResults so
+    # consumers can resolve signal paths by member name exactly like direct
+    # routes. Each carries `via` = the cascade trigger, flagging it as
+    # auto-detected for the human marker.
+    for block in data.get("cascades") or (
+        [data["cascade"]] if "cascade" in data else []
+    ):
+        cascaded = block.get("routed_to")
+        results.append(
+            FileResult(
+                file=rel_path,
+                analyser=cascaded,
+                result=block.get("result"),
+                error=block.get("error"),
+                via=f"cascade:{block.get('triggered_by', '?')}",
+            )
+        )
+    return results
 
 
 def _extension_distribution(results: list[FileResult]) -> dict[str, int]:
@@ -101,7 +132,11 @@ def analyse_bundle(source: str | Path) -> BundleAnalysisResult:
     source = str(source)
 
     # Reject URLs
-    if source.startswith("http://") or source.startswith("https://") or source.startswith("git://"):
+    if (
+        source.startswith("http://")
+        or source.startswith("https://")
+        or source.startswith("git://")
+    ):
         return BundleAnalysisResult(
             source=source,
             source_type="unknown",
@@ -162,14 +197,18 @@ def _analyse_folder(
 
     for file_path in all_files:
         rel_path = str(file_path.relative_to(folder))
-        fr = _analyse_file(file_path, rel_path)
-        results.append(fr)
-        if fr.error:
-            errors.append(f"{rel_path}: {fr.error}")
-        elif fr.analyser is None:
-            unrecognised.append(rel_path)
+        for fr in _analyse_file(file_path, rel_path):
+            results.append(fr)
+            if fr.via:
+                continue  # cascade rows don't count as files: no error/unrecognised rollup
+            if fr.error:
+                errors.append(f"{rel_path}: {fr.error}")
+            elif fr.analyser is None:
+                unrecognised.append(rel_path)
 
-    analysed = sum(1 for r in results if r.error is None and r.analyser is not None)
+    analysed = sum(
+        1 for r in results if not r.via and r.error is None and r.analyser is not None
+    )
 
     return BundleAnalysisResult(
         source=source,
@@ -178,7 +217,9 @@ def _analyse_folder(
         analysed_files=analysed,
         unrecognised_files=unrecognised,
         errors=errors,
-        file_type_distribution=_extension_distribution(results),
+        file_type_distribution=_extension_distribution(
+            [r for r in results if not r.via]
+        ),
         results=results,
         error=None,
     )
@@ -208,7 +249,8 @@ def _analyse_zip(zip_path: Path, source: str, source_type: str) -> BundleAnalysi
 
         # Collect nested zip names for unrecognised list
         nested_zips = [
-            m for m in members
+            m
+            for m in members
             if not m.endswith("/") and Path(m).suffix.lower() == ".zip"
         ]
 
@@ -218,16 +260,22 @@ def _analyse_zip(zip_path: Path, source: str, source_type: str) -> BundleAnalysi
 
         for file_path in all_files:
             rel_path = str(file_path.relative_to(tmp_dir))
-            fr = _analyse_file(file_path, rel_path)
-            results.append(fr)
-            if fr.error:
-                errors.append(f"{rel_path}: {fr.error}")
-            elif fr.analyser is None:
-                unrecognised.append(rel_path)
+            for fr in _analyse_file(file_path, rel_path):
+                results.append(fr)
+                if fr.via:
+                    continue  # cascade rows don't count as files
+                if fr.error:
+                    errors.append(f"{rel_path}: {fr.error}")
+                elif fr.analyser is None:
+                    unrecognised.append(rel_path)
 
         # total_files includes nested zips that were not extracted
         total_files = len(all_files) + len(nested_zips)
-        analysed = sum(1 for r in results if r.error is None and r.analyser is not None)
+        analysed = sum(
+            1
+            for r in results
+            if not r.via and r.error is None and r.analyser is not None
+        )
 
         return BundleAnalysisResult(
             source=source,
@@ -236,7 +284,9 @@ def _analyse_zip(zip_path: Path, source: str, source_type: str) -> BundleAnalysi
             analysed_files=analysed,
             unrecognised_files=unrecognised,
             errors=errors,
-            file_type_distribution=_extension_distribution(results),
+            file_type_distribution=_extension_distribution(
+                [r for r in results if not r.via]
+            ),
             results=results,
             error=None,
         )
